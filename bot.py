@@ -10,7 +10,7 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO)
 
 # === ДАННЫЕ ===
-TOKEN = os.environ.get("BOT_TOKEN") or "ТВОЙ_ТОКЕН"
+TOKEN = "7346291411:AAEySV35XOFkd35q_7JIIj1Fe7GzE12SNA4"
 ADMIN_USERNAME = "@whyresale"
 ORDERS_FILE = "orders.json"
 
