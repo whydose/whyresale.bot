@@ -1,151 +1,130 @@
-import os
-import json
+import logging
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import ParseMode
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils import executor
-from aiogram.dispatcher.filters import Text
+import json
+import os
 
-BOT_TOKEN = "7346291411:AAEySV35XOFkd35q_7JIIj1Fe7GzE12SNA4"
-API_TOKEN = os.getenv('BOT_TOKEN')
-PORT = int(os.environ.get("PORT", 10000))
+API_TOKEN = "7346291411:AAEySV35XOFkd35q_7JIIj1Fe7GzE12SNA4"
+
+# Логирование
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
 
-# Структура каталога товаров
+# Хранилище для корзины
+user_cart = {}
+
+# Хранилище заказов
+orders = []
+
+# Товары
 catalog = {
-    'Штаны/брюки': [
-        {'name': 'Джинсы Balenciaga', 'size': 'S-XL', 'price': '7990р', 'image': 'url_1'},
-        {'name': 'Спортивные брюки Balenciaga С двойной талией Черного цвета', 'size': 'S-XL', 'price': '9990р', 'image': 'url_2'},
-        {'name': 'Спортивные брюки Balenciaga с двойной талией Серого цвета', 'size': 'S-XL', 'price': '9990р', 'image': 'url_3'},
-        {'name': 'Джинсовые брюки Vuja De Diviser наизнанку', 'size': 'S-XL', 'price': '10990р', 'image': 'url_4'}
-    ],
     'Обувь': [
-        {'name': 'New balance 2002r', 'size': '36-45eu', 'price': '6000р', 'image': 'url_5'},
-        {'name': 'Dior b22', 'size': '36-45eu', 'price': '9900р', 'image': 'url_6'},
-        {'name': 'Dior b23', 'size': '36-45eu', 'price': '14900р', 'image': 'url_7'},
-        {'name': 'Кроссовки Prada Cloudbust Thunder', 'size': '36-45eu', 'price': '16900р', 'image': 'url_8'},
-        {'name': 'Yeezy boost 350', 'size': '36-45eu', 'price': '6190р', 'image': 'url_9'}
+        {'name': 'New balance 2002r', 'sizes': '36-45eu', 'price': '6000р', 'image': 'path_to_image1.jpg'},
+        {'name': 'Dior b22', 'sizes': '36-45eu', 'price': '9900р', 'image': 'path_to_image2.jpg'},
+        {'name': 'Dior b23', 'sizes': '36-45eu', 'price': '14900р', 'image': 'path_to_image3.jpg'},
+        {'name': 'Prada Cloudbust Thunder', 'sizes': '36-45eu', 'price': '16900р', 'image': 'path_to_image4.jpg'},
+        {'name': 'Yeezy boost 350', 'sizes': '36-45eu', 'price': '6190р', 'image': 'path_to_image5.jpg'}
+    ],
+    'Штаны/брюки/шорты': [
+        {'name': 'Джинсы Balenciaga', 'sizes': 'S-XL', 'price': '7990р', 'image': 'path_to_image6.jpg'},
+        {'name': 'Спортивные брюки Balenciaga Черные', 'sizes': 'S-XL', 'price': '9990р', 'image': 'path_to_image7.jpg'},
+        {'name': 'Спортивные брюки Balenciaga Серые', 'sizes': 'S-XL', 'price': '9990р', 'image': 'path_to_image8.jpg'},
+        {'name': 'Джинсовые брюки Vuja De', 'sizes': 'S-XL', 'price': '10990р', 'image': 'path_to_image9.jpg'}
     ]
 }
 
-# Корзина покупок по user_id
-user_cart = {}
-
-# Начальная команда /start
+# Стартовое меню
 @dp.message_handler(commands=['start'])
-async def start_command(message: types.Message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("Каталог")
-    item2 = types.KeyboardButton("Отзывы")
-    item3 = types.KeyboardButton("О нас")
-    markup.add(item1, item2, item3)
-    await message.answer("Привет! Я помогу тебе с покупками.", reply_markup=markup)
+async def cmd_start(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add('Каталог', 'Отзывы', 'О нас')
+    await message.answer("Добро пожаловать в наш магазин!", reply_markup=keyboard)
 
-# Навигация по каталогу
+# Меню каталога
+@dp.message_handler(lambda message: message.text == "Каталог")
 async def show_catalog(message: types.Message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("Штаны/брюки")
-    item2 = types.KeyboardButton("Обувь")
-    item3 = types.KeyboardButton("Назад")
-    markup.add(item1, item2, item3)
-    await message.answer("Выберите категорию:", reply_markup=markup)
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add('Обувь', 'Штаны/брюки/шорты', 'Назад')
+    await message.answer("Выберите категорию:", reply_markup=keyboard)
 
-# Показываем товары из категории
-async def show_items(message: types.Message, category: str):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    items = catalog.get(category, [])
-    for item in items:
-        markup.add(types.KeyboardButton(item['name']))
-    item_back = types.KeyboardButton("Назад")
-    item_cart = types.KeyboardButton("Перейти в корзину")
-    markup.add(item_back, item_cart)
+# Обувь
+@dp.message_handler(lambda message: message.text == "Обувь")
+async def show_shoes(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add('Назад')
+    for item in catalog['Обувь']:
+        await message.answer(f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}", reply_markup=keyboard)
+    await message.answer("Выберите товар, чтобы добавить в корзину.", reply_markup=keyboard)
 
-    items_text = "\n".join([f"{item['name']} - {item['price']}" for item in items])
-    await message.answer(f"Товары в категории {category}:\n{items_text}", reply_markup=markup)
+# Штаны/брюки/шорты
+@dp.message_handler(lambda message: message.text == "Штаны/брюки/шорты")
+async def show_pants(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add('Назад')
+    for item in catalog['Штаны/брюки/шорты']:
+        await message.answer(f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}", reply_markup=keyboard)
+    await message.answer("Выберите товар, чтобы добавить в корзину.", reply_markup=keyboard)
 
-# Добавить товар в корзину
-@dp.message_handler(Text(equals="Добавить в корзину"))
+# Обработка кнопки назад
+@dp.message_handler(lambda message: message.text == "Назад")
+async def back_to_main(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add('Каталог', 'Отзывы', 'О нас')
+    await message.answer("Вы вернулись в главное меню", reply_markup=keyboard)
+
+# Добавление в корзину
+@dp.message_handler(lambda message: message.text.startswith("Добавить в корзину"))
 async def add_to_cart(message: types.Message):
-    item_name = message.text.strip()  # Имя товара
+    item_name = message.text.split(" ")[3:]  # Извлекаем название товара
     user_id = message.from_user.id
-
     if user_id not in user_cart:
         user_cart[user_id] = []
-
     user_cart[user_id].append(item_name)
-    await message.answer(f"{item_name} добавлен в корзину!")
+    await message.answer(f"{item_name} добавлен в вашу корзину.")
 
-# Показать корзину
-async def show_cart(message: types.Message):
+# Просмотр корзины
+@dp.message_handler(lambda message: message.text == "Корзина")
+async def view_cart(message: types.Message):
     user_id = message.from_user.id
     if user_id in user_cart and user_cart[user_id]:
         cart_items = "\n".join(user_cart[user_id])
-        await message.answer(f"Ваша корзина:\n{cart_items}")
+        await message.answer(f"Ваши товары в корзине:\n{cart_items}")
     else:
-        await message.answer("Ваша корзина пуста!")
-
-# Удалить товар из корзины
-@dp.message_handler(Text(equals="Удалить из корзины"))
-async def remove_from_cart(message: types.Message):
-    item_name = message.text.strip()  # Имя товара
-    user_id = message.from_user.id
-    if user_id in user_cart and item_name in user_cart[user_id]:
-        user_cart[user_id].remove(item_name)
-        await message.answer(f"{item_name} удален из корзины.")
-    else:
-        await message.answer(f"{item_name} нет в корзине.")
+        await message.answer("Ваша корзина пуста.")
 
 # Подтверждение заказа
-@dp.message_handler(Text(equals="Оформить заказ"))
-async def confirm_order(message: types.Message):
+@dp.message_handler(lambda message: message.text == "Оформить заказ")
+async def order_confirmation(message: types.Message):
     user_id = message.from_user.id
-    if user_id not in user_cart or not user_cart[user_id]:
-        await message.answer("Ваша корзина пуста. Пожалуйста, добавьте товары в корзину.")
-        return
+    if user_id in user_cart and user_cart[user_id]:
+        order_details = "\n".join(user_cart[user_id])
+        await message.answer(f"Вы хотите оформить заказ на следующие товары:\n{order_details}\n\nПожалуйста, подтвердите, чтобы продолжить.")
+        await message.answer("Введите ваши данные для анкеты: ФИО, адрес доставки, телефон.")
+    else:
+        await message.answer("Ваша корзина пуста. Добавьте товары в корзину.")
 
-    # Анкета
-    markup = types.ReplyKeyboardRemove()
-    await message.answer("Пожалуйста, предоставьте следующие данные:\n1. ФИО\n2. Адрес доставки\n3. Номер телефона", reply_markup=markup)
-    await message.answer("После того как заполните, отправьте ваши данные и скриншот оплаты.", reply_markup=markup)
-
-# Обработчик данных анкеты
-@dp.message_handler(lambda message: message.text)
-async def handle_order_details(message: types.Message):
+# Запись данных анкеты
+@dp.message_handler(lambda message: message.text != "Оформить заказ")
+async def collect_order_data(message: types.Message):
     user_id = message.from_user.id
-    user_data = message.text
+    if message.text:
+        orders.append({
+            "user_id": user_id,
+            "order_details": user_cart.get(user_id, []),
+            "order_data": message.text
+        })
+        # Отправка уведомления владельцу
+        await bot.send_message('@whyresale', f"Новый заказ: {message.text}\n{user_cart.get(user_id, [])}")
+        await message.answer("Спасибо за заказ! Мы получим ваши данные.")
+        user_cart[user_id] = []  # Очищаем корзину
+    else:
+        await message.answer("Введите корректные данные анкеты.")
 
-    # Отправка данных на аккаунт @whyresale
-    await bot.send_message('@whyresale', f"Новый заказ от {message.from_user.username}:\n{user_data}")
-
-    # Очистить корзину
-    user_cart[user_id] = []
-
-    await message.answer("Спасибо за заказ! Ваш заказ отправлен. Мы свяжемся с вами для подтверждения.")
-
-# Обработчик команды "Каталог"
-@dp.message_handler(Text(equals="Каталог"))
-async def catalog_command(message: types.Message):
-    await show_catalog(message)
-
-# Обработчик кнопки "Штаны/брюки" и "Обувь"
-@dp.message_handler(Text(equals="Штаны/брюки"))
-async def catalog_pants(message: types.Message):
-    await show_items(message, "Штаны/брюки")
-
-@dp.message_handler(Text(equals="Обувь"))
-async def catalog_shoes(message: types.Message):
-    await show_items(message, "Обувь")
-
-# Обработчик кнопки "Назад"
-@dp.message_handler(Text(equals="Назад"))
-async def back_command(message: types.Message):
-    await show_catalog(message)
-
-# Обработчик кнопки "Перейти в корзину"
-@dp.message_handler(Text(equals="Перейти в корзину"))
-async def go_to_cart(message: types.Message):
-    await show_cart(message)
-
-# Запуск бота
 if __name__ == '__main__':
+    from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
