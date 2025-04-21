@@ -146,6 +146,54 @@ async def view_cart(message: types.Message):
     await message.answer(text, reply_markup=keyboard)
 
 
-@dp.callback_query_handler(lambda c: c
-::contentReference[oaicite:0]{index=0}
- 
+@dp.callback_query_handler(lambda c: c.data == "checkout")
+async def checkout(callback_query: types.CallbackQuery):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Оформить заказ", callback_data="start_order"))
+    await bot.send_message(callback_query.from_user.id, "Вы готовы оформить заказ?", reply_markup=keyboard)
+
+
+@dp.callback_query_handler(lambda c: c.data == "start_order")
+async def start_order(callback_query: types.CallbackQuery):
+    await OrderForm.full_name.set()
+    await bot.send_message(callback_query.from_user.id, "Пожалуйста, введите ваше ФИО:")
+
+
+@dp.message_handler(state=OrderForm.full_name)
+async def process_full_name(message: types.Message, state: FSMContext):
+    await state.update_data(full_name=message.text)
+    await OrderForm.next()
+    await message.answer("Введите адрес доставки:")
+
+
+@dp.message_handler(state=OrderForm.address)
+async def process_address(message: types.Message, state: FSMContext):
+    await state.update_data(address=message.text)
+    await OrderForm.next()
+    await message.answer("Введите номер телефона:")
+
+
+@dp.message_handler(state=OrderForm.phone)
+async def process_phone(message: types.Message, state: FSMContext):
+    await state.update_data(phone=message.text)
+    await OrderForm.next()
+    await message.answer("Отправьте скриншот с подтверждением оплаты.")
+
+
+@dp.message_handler(state=OrderForm.payment, content_types=types.ContentType.PHOTO)
+async def process_payment(message: types.Message, state: FSMContext):
+    user_data = await state.get_data()
+    full_name = user_data.get('full_name')
+    address = user_data.get('address')
+    phone = user_data.get('phone')
+    payment_screenshot = message.photo[-1].file_id
+
+    # Сообщение админу
+    admin_id = "@whyresale"
+    await bot.send_message(admin_id, f"Новый заказ:\nФИО: {full_name}\nАдрес: {address}\nТелефон: {phone}\nСкриншот оплаты: {payment_screenshot}")
+
+    # Закрытие формы
+    await state.finish()
+
+    await message.answer("Ваш заказ оформлен! Мы свяжемся с вами для подтверждения.")
+    await bot.send_message(message.chat.id, "Спасибо за покупку!")
