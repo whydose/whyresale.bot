@@ -1,179 +1,228 @@
 import json
-import logging
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    ReplyKeyboardRemove
+)
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters, ConversationHandler
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+    ConversationHandler,
 )
 
-logging.basicConfig(level=logging.INFO)
-
-# === ДАННЫЕ ===
 TOKEN = "7346291411:AAEySV35XOFkd35q_7JIIj1Fe7GzE12SNA4"
 ADMIN_USERNAME = "@whyresale"
 ORDERS_FILE = "orders.json"
 
-# Пример товаров
-ITEMS = [
-    {"id": "1", "name": "Nike Air Max", "price": "9000₽"},
-    {"id": "2", "name": "Stone Island Pants", "price": "8500₽"}
-]
-
-# === СТАНЫ АНКЕТЫ ===
-(ASK_NAME, ASK_ADDRESS, ASK_PHONE, WAITING_FOR_SCREENSHOT) = range(4)
-
-user_cart = {}
-user_forms = {}
-
-# === КОМАНДЫ ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    buttons = [
-        [InlineKeyboardButton(f"{item['name']} - {item['price']}", callback_data=f"add_{item['id']}")]
-        for item in ITEMS
+# Каталог товаров
+catalog = {
+    "Штаны": [
+        {
+            "id": "pants_1",
+            "name": "Fear of God Essentials Pants",
+            "description": "Oversized fit, premium quality replica",
+            "photo": "https://i.imgur.com/WQFEfYJ.jpg"
+        }
+    ],
+    "Обувь": [
+        {
+            "id": "shoes_1",
+            "name": "New Balance 9060 Grey",
+            "description": "Top quality rep. Very comfortable and stylish",
+            "photo": "https://i.imgur.com/C2MNUGB.jpg"
+        }
     ]
-    await update.message.reply_text("Добро пожаловать! Выберите товар:", reply_markup=InlineKeyboardMarkup(buttons))
+}
 
+# Хранилище корзин и заказов
+user_carts = {}
+user_order_data = {}
 
-async def cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    cart_items = user_cart.get(user_id, [])
-    if not cart_items:
-        await update.message.reply_text("Ваша корзина пуста.")
-        return
+# ──────────────────────────────────────────────────────────────
+# Клавиатуры
 
-    text = "🛒 Ваша корзина:\n"
-    buttons = []
-    for item in cart_items:
-        text += f"• {item['name']} - {item['price']}\n"
-        buttons.append([InlineKeyboardButton(f"❌ Удалить {item['name']}", callback_data=f"remove_{item['id']}")])
+def main_menu_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📦 Каталог", callback_data="catalog")],
+        [InlineKeyboardButton("💬 Отзывы", callback_data="reviews")],
+        [InlineKeyboardButton("ℹ️ О нас", callback_data="about")]
+    ])
 
-    buttons.append([InlineKeyboardButton("✅ Оформить заказ", callback_data="checkout")])
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+def catalog_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("👖 Штаны", callback_data="category_Штаны")],
+        [InlineKeyboardButton("👟 Обувь", callback_data="category_Обувь")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main")]
+    ])
 
+def back_to_catalog_keyboard():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="catalog")]])
 
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def cart_keyboard(user_id):
+    cart = user_carts.get(user_id, [])
+    keyboard = []
+    for item in cart:
+        keyboard.append([InlineKeyboardButton(f"🗑 Удалить {item['name']}", callback_data=f"remove_{item['id']}")])
+    if cart:
+        keyboard.append([InlineKeyboardButton("✅ Оформить заказ", callback_data="checkout")])
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main")])
+    return InlineKeyboardMarkup(keyboard)
+
+# ──────────────────────────────────────────────────────────────
+# Команды
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Выберите раздел:", reply_markup=main_menu_keyboard())
+
+async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
 
-    if query.data.startswith("add_"):
-        item_id = query.data.split("_")[1]
-        item = next((i for i in ITEMS if i["id"] == item_id), None)
-        if item:
-            user_cart.setdefault(user_id, []).append(item)
-            await query.edit_message_text(f"{item['name']} добавлен в корзину.")
+    if query.data == "catalog":
+        await query.edit_message_text("Выберите категорию:", reply_markup=catalog_keyboard())
+
+    elif query.data == "back_to_main":
+        await query.edit_message_text("Выберите раздел:", reply_markup=main_menu_keyboard())
+
+    elif query.data.startswith("category_"):
+        category = query.data.split("_")[1]
+        items = catalog.get(category, [])
+        for item in items:
+            text = f"{item['name']}\n\n{item['description']}"
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ В корзину", callback_data=f"add_{item['id']}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="catalog")]
+            ])
+            await context.bot.send_photo(chat_id=query.message.chat.id, photo=item["photo"], caption=text, reply_markup=keyboard)
+
+    elif query.data.startswith("add_"):
+        item_id = query.data.split("_", 1)[1]
+        for category_items in catalog.values():
+            for item in category_items:
+                if item["id"] == item_id:
+                    user_carts.setdefault(user_id, []).append(item)
+                    await query.answer("Добавлено в корзину!")
+                    return
 
     elif query.data.startswith("remove_"):
-        item_id = query.data.split("_")[1]
-        cart = user_cart.get(user_id, [])
-        user_cart[user_id] = [i for i in cart if i["id"] != item_id]
-        await query.edit_message_text("Товар удалён из корзины.")
+        item_id = query.data.split("_", 1)[1]
+        cart = user_carts.get(user_id, [])
+        user_carts[user_id] = [item for item in cart if item["id"] != item_id]
+        await query.edit_message_text("Обновлённая корзина:", reply_markup=cart_keyboard(user_id))
 
     elif query.data == "checkout":
-        await query.edit_message_text("Введите ваше ФИО:")
+        await query.message.reply_text("Введите ФИО:")
         return ASK_NAME
 
+    elif query.data == "reviews":
+        await query.edit_message_text("💬 Отзывы\n\nЗдесь будут отзывы клиентов.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main")]]))
 
-# === АНКЕТА ===
+    elif query.data == "about":
+        await query.edit_message_text("ℹ️ О нас\n\nМагазин люкс-реплик Why Resale.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_main")]]))
+
+# ──────────────────────────────────────────────────────────────
+# /cart
+
+async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    cart = user_carts.get(user_id, [])
+    if not cart:
+        await update.message.reply_text("🛒 Ваша корзина пуста.")
+    else:
+        text = "🛒 Ваша корзина:\n\n"
+        for item in cart:
+            text += f"- {item['name']}\n"
+        await update.message.reply_text(text, reply_markup=cart_keyboard(user_id))
+
+# ──────────────────────────────────────────────────────────────
+# Оформление заказа
+
+ASK_NAME, ASK_ADDRESS, ASK_PHONE, ASK_SCREENSHOT = range(4)
+
 async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_forms[update.effective_user.id] = {"name": update.message.text}
+    user_order_data[update.effective_user.id] = {"name": update.message.text}
     await update.message.reply_text("Введите адрес доставки:")
     return ASK_ADDRESS
 
-
 async def ask_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_forms[update.effective_user.id]["address"] = update.message.text
+    user_order_data[update.effective_user.id]["address"] = update.message.text
     await update.message.reply_text("Введите номер телефона:")
     return ASK_PHONE
 
-
 async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_forms[update.effective_user.id]["phone"] = update.message.text
+    user_order_data[update.effective_user.id]["phone"] = update.message.text
     await update.message.reply_text(
-        "Почти готово! Переведите сумму по реквизитам:\n\n"
+        "✅ Отлично!\n\nОтправьте скриншот оплаты на реквизиты:\n\n"
         "💳 СБЕРБАНК Попов Б.А\n"
-        "📄 Номер счёта: 40817810738129310987\n"
-        "💳 Номер карты: 2202 2081 3069 2370\n\n"
-        "Затем отправьте скриншот оплаты."
+        "Номер счёта: 40817810738129310987\n"
+        "Номер карты: 2202 2081 3069 2370\n\n"
+        "📸 Пришлите скрин:"
     )
-    return WAITING_FOR_SCREENSHOT
-
+    return ASK_SCREENSHOT
 
 async def receive_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    form = user_forms.get(user_id)
-    cart = user_cart.get(user_id, [])
+    order = user_order_data[user_id]
+    cart = user_carts.get(user_id, [])
 
-    if not form or not cart:
-        await update.message.reply_text("Произошла ошибка. Попробуйте снова.")
-        return ConversationHandler.END
+    # Сохраняем в файл
+    all_orders = []
+    if os.path.exists(ORDERS_FILE):
+        with open(ORDERS_FILE, "r") as f:
+            all_orders = json.load(f)
+    all_orders.append({"user_id": user_id, "order": order, "cart": cart})
+    with open(ORDERS_FILE, "w") as f:
+        json.dump(all_orders, f, indent=2)
 
-    order = {
-        "user": update.effective_user.username,
-        "cart": cart,
-        "form": form,
-    }
-
-    # Сохраняем заказ
-    try:
-        if not os.path.exists(ORDERS_FILE):
-            with open(ORDERS_FILE, "w") as f:
-                json.dump([], f)
-        with open(ORDERS_FILE, "r+") as f:
-            orders = json.load(f)
-            orders.append(order)
-            f.seek(0)
-            json.dump(orders, f, indent=2)
-    except Exception as e:
-        logging.error(f"Ошибка сохранения заказа: {e}")
-
-    # Уведомление админу
-    screenshot_file_id = update.message.photo[-1].file_id if update.message.photo else None
-    admin_text = (
-        f"📦 Новый заказ от @{update.effective_user.username}:\n"
-        f"📝 ФИО: {form['name']}\n"
-        f"🏠 Адрес: {form['address']}\n"
-        f"📞 Телефон: {form['phone']}\n"
+    # Отправляем админу
+    caption = (
+        f"📦 Новый заказ от @{update.effective_user.username}:\n\n"
+        f"👤 ФИО: {order['name']}\n"
+        f"🏠 Адрес: {order['address']}\n"
+        f"📞 Телефон: {order['phone']}\n\n"
         f"🛒 Корзина:\n" +
-        "\n".join([f" - {item['name']} ({item['price']})" for item in cart])
+        "\n".join(f"- {item['name']}" for item in cart)
     )
+    photo = update.message.photo[-1].file_id
+    await context.bot.send_photo(chat_id=ADMIN_USERNAME, photo=photo, caption=caption)
 
-    await context.bot.send_message(chat_id=ADMIN_USERNAME, text=admin_text)
-    if screenshot_file_id:
-        await context.bot.send_photo(chat_id=ADMIN_USERNAME, photo=screenshot_file_id)
+    await update.message.reply_text("✅ Спасибо! Ваш заказ оформлен.", reply_markup=main_menu_keyboard())
 
-    await update.message.reply_text("Спасибо за заказ! Мы свяжемся с вами в ближайшее время.")
-    user_cart[user_id] = []
+    # Очистка
+    user_carts.pop(user_id, None)
+    user_order_data.pop(user_id, None)
     return ConversationHandler.END
 
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Оформление заказа отменено.")
-    return ConversationHandler.END
-
+# ──────────────────────────────────────────────────────────────
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cart", cart))
-    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(CommandHandler("cart", show_cart))
+    app.add_handler(CallbackQueryHandler(handle_buttons))
 
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_callback, pattern="^checkout$")],
+    convo = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_buttons, pattern="^checkout$")],
         states={
             ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
             ASK_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_address)],
             ASK_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
-            WAITING_FOR_SCREENSHOT: [MessageHandler(filters.PHOTO, receive_screenshot)],
+            ASK_SCREENSHOT: [MessageHandler(filters.PHOTO, receive_screenshot)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[],
     )
-    app.add_handler(conv_handler)
+    app.add_handler(convo)
 
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
