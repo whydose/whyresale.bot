@@ -24,11 +24,11 @@ orders = []
 # Товары
 catalog = {
     'Обувь': [
-        {'name': 'New balance 2002r', 'sizes': '36-45eu', 'price': '6000р', 'image': 'path_to_image1.jpg'},
-        {'name': 'Dior b22', 'sizes': '36-45eu', 'price': '9900р', 'image': 'path_to_image2.jpg'},
-        {'name': 'Dior b23', 'sizes': '36-45eu', 'price': '14900р', 'image': 'path_to_image3.jpg'},
-        {'name': 'Prada Cloudbust Thunder', 'sizes': '36-45eu', 'price': '16900р', 'image': 'path_to_image4.jpg'},
-        {'name': 'Yeezy boost 350', 'sizes': '36-45eu', 'price': '6190р', 'image': 'path_to_image5.jpg'}
+        {'name': 'New balance 2002r', 'sizes': '36-45eu', 'price': '6000р', 'image': 'images/New-balance-2002r.png'},
+        {'name': 'Dior b22', 'sizes': '36-45eu', 'price': '9900р', 'image': 'images/Dior-B22.png'},
+        {'name': 'Dior b23', 'sizes': '36-45eu', 'price': '14900р', 'image': 'images/Dior-b23.jpg'},
+        {'name': 'Prada Cloudbust Thunder', 'sizes': '36-45eu', 'price': '16900р', 'image': 'images/Prada-Cloudbust-Thunder.jpg.webp'},
+        {'name': 'Yeezy boost 350', 'sizes': '36-45eu', 'price': '6190р', 'image': 'images/Yeezy-boost-350.jpg'}
     ],
     'Штаны/брюки/шорты': [
         {'name': 'Джинсы Balenciaga', 'sizes': 'S-XL', 'price': '7990р', 'image': 'path_to_image6.jpg'},
@@ -62,10 +62,13 @@ async def show_shoes(message: types.Message):
         inline_kb = InlineKeyboardMarkup()
         inline_kb.add(InlineKeyboardButton("Добавить в корзину", callback_data=f"add_{item['name']}"))
         
-        await message.answer(
-            f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}",
-            reply_markup=inline_kb
-        )
+        # Отправка изображения + описание
+        with open(item['image'], 'rb') as photo:
+            await message.answer_photo(
+                photo,
+                caption=f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}",
+                reply_markup=inline_kb
+            )
     
     await message.answer("Выберите товар, чтобы добавить в корзину.", reply_markup=keyboard)
 
