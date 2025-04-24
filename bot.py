@@ -7,6 +7,7 @@ import json
 import os
 
 API_TOKEN = "7346291411:AAEySV35XOFkd35q_7JIIj1Fe7GzE12SNA4"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Логирование
 logging.basicConfig(level=logging.INFO)
@@ -24,11 +25,11 @@ orders = []
 # Товары
 catalog = {
     'Обувь': [
-        {'name': 'New balance 2002r', 'sizes': '36-45eu', 'price': '6000р', 'image': 'images/New-balance-2002r.png'},
-        {'name': 'Dior b22', 'sizes': '36-45eu', 'price': '9900р', 'image': 'images/Dior-B22.png'},
-        {'name': 'Dior b23', 'sizes': '36-45eu', 'price': '14900р', 'image': 'images/Dior-b23.jpg'},
-        {'name': 'Prada Cloudbust Thunder', 'sizes': '36-45eu', 'price': '16900р', 'image': 'images/Prada-Cloudbust-Thunder.jpg.webp'},
-        {'name': 'Yeezy boost 350', 'sizes': '36-45eu', 'price': '6190р', 'image': 'images/Yeezy-boost-350.jpg'}
+        {'name': 'New balance 2002r', 'sizes': '36-45eu', 'price': '6000р', 'image': os.path.join(BASE_DIR, 'images', 'New-balance-2002r.png'},
+        {'name': 'Dior b22', 'sizes': '36-45eu', 'price': '9900р', 'image': os.path.join(BASE_DIR, 'images', 'Dior-B22.png'},
+        {'name': 'Dior b23', 'sizes': '36-45eu', 'price': '14900р', 'image': os.path.join(BASE_DIR, 'images', 'Dior-b23.jpg'},
+        {'name': 'Prada Cloudbust Thunder', 'sizes': '36-45eu', 'price': '16900р', 'image': os.path.join(BASE_DIR, 'images', 'Prada-Cloudbust-Thunder.jpg.webp'},
+        {'name': 'Yeezy boost 350', 'sizes': '36-45eu', 'price': '6190р', 'image': os.path.join(BASE_DIR, 'images', 'Yeezy-boost-350.jpg'}
     ],
     'Штаны/брюки/шорты': [
         {'name': 'Джинсы Balenciaga', 'sizes': 'S-XL', 'price': '7990р', 'image': 'path_to_image6.jpg'},
@@ -62,11 +63,16 @@ async def show_shoes(message: types.Message):
         inline_kb = InlineKeyboardMarkup()
         inline_kb.add(InlineKeyboardButton("Добавить в корзину", callback_data=f"add_{item['name']}"))
         
-        # Отправка изображения + описание
-        with open(item['image'], 'rb') as photo:
-            await message.answer_photo(
-                photo,
-                caption=f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}",
+        try:
+            with open(item['image'], 'rb') as photo:
+                await message.answer_photo(
+                    photo,
+                    caption=f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}",
+                    reply_markup=inline_kb
+                )
+        except FileNotFoundError:
+            await message.answer(
+                f"Название: {item['name']}\nРазмеры: {item['sizes']}\nЦена: {item['price']}\n[Изображение недоступно]",
                 reply_markup=inline_kb
             )
     
